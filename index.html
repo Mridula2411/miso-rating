@@ -356,17 +356,22 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
 
   // The Apps Script answers without CORS headers, so the reply cannot be read: a request that
   // reaches the server counts as sent. text/plain avoids a CORS preflight.
+  // an item is sent once at a time; a send still on its way is not "unsent"
+  const sending = new Set();
   async function send(it) {
-    if (!DATA.submitUrl || !isComplete(it.blindId)) return;
+    if (!DATA.submitUrl || !isComplete(it.blindId) || sending.has(it.blindId)) return;
+    sending.add(it.blindId);
     try {
       await fetch(DATA.submitUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(rowOf(it)) });
       state.sent[it.blindId] = true;
     } catch (e) {
       state.sent[it.blindId] = false;
     }
+    sending.delete(it.blindId);
     save();
+    if (state.finished && document.getElementById('restart')) done(); // refresh the thank-you screen
   }
-  const unsent = () => DATA.items.filter((it) => isComplete(it.blindId) && !state.sent[it.blindId]);
+  const unsent = () => DATA.items.filter((it) => isComplete(it.blindId) && !state.sent[it.blindId] && !sending.has(it.blindId));
 
   // ---------- top bar ----------
   function topbar() {
@@ -624,6 +629,7 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
     let message;
     if (missing) message = complete + ' of ' + DATA.items.length + ' rated. Incomplete ones are left out of the comparison.';
     else if (!online) message = 'All ' + DATA.items.length + ' rated. Download your answers and send the file back.';
+    else if (sending.size) message = 'Sending your answers…';
     else if (pending) message = pending + ' answer(s) could not be sent yet. Check your connection and try again.';
     else message = 'All ' + DATA.items.length + ' rated and sent. You can close this page.';
     const main = online && pending ? '<button class="pill" id="retry">Send again</button>'
@@ -654,10 +660,7 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
       welcome();
     };
     // answers finished offline are sent as soon as this screen opens
-    if (online && pending && !done.retrying) {
-      done.retrying = true;
-      Promise.all(unsent().map(send)).then(() => { done.retrying = false; if (state.finished) done(); });
-    }
+    if (online && pending) unsent().forEach(send);
   }
 
   // ---------- CSV in the format `npm run human -- compare` reads ----------
