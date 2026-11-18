@@ -290,7 +290,8 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
       '<p class="hero-sub rise d2">You will read ' + DATA.items.length + ' short ' + what + ' between a fictional user and Miso, a diet coach, ' +
       'then answer a few questions about each one. Read as if you were the user.</p>' +
       '<div class="consent rise d3"><p>This is part of an EPFL student project on the quality of chatbot replies. ' +
-      'We do not ask for your name or email. Your ratings, comments and the optional questions about you are ' + kept + '. ' +
+      'We do not ask for your name or email. You will be asked your age range and a few short questions about yourself. ' +
+      'Your ratings, comments and these answers are ' + kept + '. ' +
       'Taking part is voluntary and you can stop at any time.' +
       (DATA.contact ? ' Questions or want your answers removed? Contact ' + esc(DATA.contact) + ' with your code.' : '') + '</p>' +
       '<label class="check"><input type="checkbox" id="agree"> I have read this and agree to take part</label></div>' +
@@ -310,10 +311,12 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
     };
   }
 
-  // ---------- three optional questions about the rater, for the analysis ----------
+  // ---------- required questions about the rater, for the analysis ----------
+  // age in ranges, not exact years, so a row cannot point to one person
   const ABOUT = [
+    { id: 'age', text: 'How old are you?', options: ['18–24', '25–34', '35–44', '45–54', '55+'] },
+    { id: 'chatbots', text: 'How often do you use AI tools such as ChatGPT, Claude or Gemini?', options: ['Never', 'Monthly', 'Weekly', 'Daily'] },
     { id: 'interest', text: 'How interested are you in eating more sustainably?', options: ['1', '2', '3', '4', '5'], ends: ['Not at all', 'Very'] },
-    { id: 'chatbots', text: 'How often do you use AI chatbots?', options: ['Never', 'Monthly', 'Weekly', 'Daily'] },
     { id: 'english', text: 'Is English your first language?', options: ['Yes', 'No'] },
   ];
 
@@ -324,22 +327,33 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD4AAABBCAYAAACJtRdQ
       '<div class="center"><div class="card-hero">' +
       '<p class="kicker rise">Your code: ' + esc(state.rater) + '</p>' +
       '<h1 class="hero-title serif rise d1">A bit about you</h1>' +
-      '<p class="hero-sub rise d2">Three quick questions. All optional.</p>' +
+      '<p class="hero-sub rise d2">' + ABOUT.length + ' quick questions. Please answer all of them.</p>' +
       ABOUT.map((q, i) =>
         '<div class="about rise d' + Math.min(4, i + 2) + '"><p>' + esc(q.text) + '</p><div class="chips">' +
         (q.ends ? '<span class="chip-end">' + q.ends[0] + '</span>' : '') +
         q.options.map((o) => '<button class="chip' + (bg[q.id] === o ? ' on' : '') + '" data-q="' + q.id + '" data-o="' + esc(o) + '">' + esc(o) + '</button>').join('') +
         (q.ends ? '<span class="chip-end">' + q.ends[1] + '</span>' : '') + '</div></div>').join('') +
       '<div class="rise d4"><button class="pill" id="go">Start reading</button></div>' +
+      '<div class="hint" id="abouthint"></div>' +
       '</div></div>';
+    // every question is required: Start reading stays disabled until all are answered
+    const go = document.getElementById('go');
+    const hint = document.getElementById('abouthint');
+    const paint = () => {
+      const left = ABOUT.filter((q) => !bg[q.id]).length;
+      go.disabled = left > 0;
+      hint.textContent = left ? left + ' question' + (left > 1 ? 's' : '') + ' left' : '';
+    };
     app.querySelectorAll('.chip').forEach((b) => {
       b.onclick = () => {
-        bg[b.dataset.q] = bg[b.dataset.q] === b.dataset.o ? undefined : b.dataset.o;
+        bg[b.dataset.q] = b.dataset.o;
         save();
         app.querySelectorAll('.chip[data-q="' + b.dataset.q + '"]').forEach((c) => c.classList.toggle('on', bg[c.dataset.q] === c.dataset.o));
+        paint();
       };
     });
-    document.getElementById('go').onclick = () => { state.aboutDone = true; save(); showItem(0); };
+    go.onclick = () => { if (go.disabled) return; state.aboutDone = true; save(); showItem(0); };
+    paint();
   }
 
   // ---------- sending a finished item to the Google Sheet ----------
